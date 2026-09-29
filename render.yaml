@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: fila-house
+    runtime: node
+    plan: free
+
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: npm start
+
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: NEXTAUTH_SECRET
+        sync: false
+
+      - key: NEXTAUTH_URL
+        sync: false
+
+      - key: RESEND_API_KEY
+        sync: false
