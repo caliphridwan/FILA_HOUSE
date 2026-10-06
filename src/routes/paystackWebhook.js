@@ -26,7 +26,6 @@ router.post("/", async (req, res) => {
       await markOrderPaidIfPending(reference);
     }
 
-    // Paystack just needs a 200 response to stop retrying.
     res.sendStatus(200);
   } catch (err) {
     console.error("[paystack webhook] error:", err);

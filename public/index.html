@@ -29,6 +29,10 @@
 <main>
   <!-- SHOP VIEW -->
   <section id="shopView">
+    <div class="hero">
+      <h1>Caps woven with heritage, worn with pride</h1>
+      <p>Hand-finished Atiku, Tangaran, Maroofiya and Bindo caps — sourced locally, delivered to your door.</p>
+    </div>
     <div class="shop-toolbar">
       <div class="chips" id="chipRow"></div>
       <input class="search-box" id="searchBox" placeholder="Search caps...">
@@ -51,9 +55,15 @@
         <div class="panel" style="margin-bottom:20px;">
           <h2>Add a cap</h2>
           <p class="hint">List a new cap for sale. It appears in the shop right away.</p>
-          <div class="img-drop" id="imgDrop">Click to upload a photo (optional)</div>
+
+          <div id="imgPreviewEmpty" class="img-preview-empty">No image yet</div>
           <img id="imgPreview" class="img-preview">
-          <input type="file" id="imgInput" accept="image/*" style="display:none;">
+          <div class="field">
+            <label>Image URL (Cloudinary)</label>
+            <input id="capImageUrl" placeholder="https://res.cloudinary.com/your-cloud/image/upload/...">
+            <p class="field-hint">Paste the link from your Cloudinary media library — leave blank to use a plain color swatch instead.</p>
+          </div>
+
           <div class="field"><label>Cap name</label><input id="capName" placeholder="e.g. Royal Atiku Cap"></div>
           <div class="field"><label>Category</label><select id="capCategory"></select></div>
           <div class="field-row">
@@ -129,7 +139,6 @@ let deliveryZones = [];
 let cart = []; // {capId, qty}
 let activeCategory = "All";
 let searchTerm = "";
-let uploadedFile = null;
 let selectedZoneId = null;
 
 const catColors = {};
@@ -216,7 +225,7 @@ function renderGrid(){
   }
   grid.innerHTML = caps.map(c=>`
     <div class="card">
-      <div class="swatch">${c.image_url ? `<img src="${c.image_url}">` : weaveSVG(c.category)}</div>
+      <div class="swatch">${c.image_url ? `<img src="${c.image_url}" loading="lazy">` : weaveSVG(c.category)}</div>
       <div class="card-body">
         <span class="cat-tag">${c.category}</span>
         <h3>${c.name}</h3>
@@ -381,7 +390,6 @@ async function startPayment(){
         items: cart.map(i=>({capId:i.capId, qty:i.qty})),
       }),
     });
-    // Off to Paystack's hosted checkout. It redirects back to order-confirmation.html when done.
     window.location.href = data.authorizationUrl;
   } catch (err) {
     window._checkoutError = err.message;
@@ -407,11 +415,9 @@ document.getElementById("tabAdmin").addEventListener("click", ()=>{
 document.getElementById("adminUnlockBtn").addEventListener("click", async ()=>{
   const key = document.getElementById("adminKeyInput").value.trim();
   if(!key) return;
-  // Verify the key by trying a harmless admin-only call.
   try {
     const res = await fetch("/api/categories", { method:"POST", headers:{ "Content-Type":"application/json", "x-admin-key": key }, body: JSON.stringify({name:"__key_check__"}) });
     if (res.status === 401) throw new Error("bad key");
-    // Clean up the probe category if it was created.
     const created = await res.json().catch(()=>null);
     if (created && created.id) {
       await fetch(`/api/categories/${created.id}`, { method:"DELETE", headers:{ "x-admin-key": key } });
@@ -425,18 +431,23 @@ document.getElementById("adminUnlockBtn").addEventListener("click", async ()=>{
   }
 });
 
-document.getElementById("imgDrop").addEventListener("click", ()=> document.getElementById("imgInput").click());
-document.getElementById("imgInput").addEventListener("change", (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  uploadedFile = file;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const preview = document.getElementById("imgPreview");
-    preview.src = reader.result;
+/* Live preview of the pasted Cloudinary URL */
+const capImageUrlInput = document.getElementById("capImageUrl");
+capImageUrlInput.addEventListener("input", ()=>{
+  const url = capImageUrlInput.value.trim();
+  const preview = document.getElementById("imgPreview");
+  const empty = document.getElementById("imgPreviewEmpty");
+  if(url){
+    preview.src = url;
     preview.style.display = "block";
-  };
-  reader.readAsDataURL(file);
+    empty.style.display = "none";
+    preview.onerror = ()=>{ preview.style.display = "none"; empty.style.display = "flex"; empty.textContent = "Couldn't load that image URL"; };
+    preview.onload = ()=>{ empty.textContent = "No image yet"; };
+  } else {
+    preview.style.display = "none";
+    empty.style.display = "flex";
+    empty.textContent = "No image yet";
+  }
 });
 
 function renderCategorySelect(){
@@ -451,22 +462,23 @@ document.getElementById("addCapBtn").addEventListener("click", async ()=>{
   const price = document.getElementById("capPrice").value;
   const stock = document.getElementById("capStock").value;
   const description = document.getElementById("capDesc").value.trim();
+  const image_url = document.getElementById("capImageUrl").value.trim();
 
   if(!name || !category_id || !price || !stock){ showToast("Fill in name, category, price and stock"); return; }
 
-  const form = new FormData();
-  form.append("name", name); form.append("category_id", category_id);
-  form.append("price", price); form.append("stock", stock); form.append("description", description);
-  if (uploadedFile) form.append("image", uploadedFile);
-
   try {
-    const res = await fetch("/api/caps", { method:"POST", headers:{ "x-admin-key": adminKey }, body: form });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data.error || "Could not add cap");
+    const data = await api("/api/caps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-key": adminKey },
+      body: JSON.stringify({ name, category_id, price, stock, description, image_url: image_url || null }),
+    });
     showToast(`${name} added`);
     document.getElementById("capName").value = ""; document.getElementById("capPrice").value = "";
     document.getElementById("capStock").value = ""; document.getElementById("capDesc").value = "";
-    document.getElementById("imgPreview").style.display = "none"; uploadedFile = null;
+    document.getElementById("capImageUrl").value = "";
+    document.getElementById("imgPreview").style.display = "none";
+    document.getElementById("imgPreviewEmpty").style.display = "flex";
+    document.getElementById("imgPreviewEmpty").textContent = "No image yet";
     await loadAll(); renderAdminCapTable();
   } catch (err) { showToast(err.message); }
 });

@@ -23,7 +23,6 @@ router.post("/", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // Lock and validate each cap's price/stock
     let subtotal = 0;
     const lineItems = [];
     for (const item of items) {
@@ -65,10 +64,9 @@ router.post("/", async (req, res) => {
       );
     }
 
-    // Note: stock is deducted only once payment is confirmed (webhook), not here.
+    // Stock is deducted only once payment is confirmed (webhook), not here.
     await client.query("COMMIT");
 
-    // Start the Paystack transaction now that the order is safely recorded.
     const callbackUrl = `${process.env.FRONTEND_URL}/order-confirmation.html`;
     const paystackData = await initializeTransaction({
       email,
@@ -142,7 +140,7 @@ async function markOrderPaidIfPending(orderRef) {
     const orderRes = await client.query("SELECT * FROM orders WHERE order_ref = $1 FOR UPDATE", [orderRef]);
     if (orderRes.rows.length === 0) { await client.query("ROLLBACK"); return; }
     const order = orderRes.rows[0];
-    if (order.status === "paid") { await client.query("ROLLBACK"); return; } // already processed
+    if (order.status === "paid") { await client.query("ROLLBACK"); return; }
 
     const items = await client.query("SELECT cap_id, qty FROM order_items WHERE order_id = $1", [order.id]);
     for (const item of items.rows) {

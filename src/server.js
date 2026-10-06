@@ -19,8 +19,8 @@ app.use("/api/paystack/webhook", express.raw({ type: "application/json" }), pays
 
 app.use(express.json());
 
-// Serve uploaded cap photos and the frontend
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Serve the frontend. Cap photos now live on Cloudinary, so there's no
+// local /uploads folder to serve — image_url just points straight at Cloudinary.
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.use("/api/categories", categoriesRoute);
@@ -30,7 +30,6 @@ app.use("/api/orders", ordersRoute);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
-// Fallback error handler (e.g. multer file-type/size errors)
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(400).json({ error: err.message || "Something went wrong." });

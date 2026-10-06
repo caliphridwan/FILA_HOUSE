@@ -2,23 +2,27 @@
 
 A full-stack e-commerce app for selling local caps (Atiku, Tangaran, Maroofiya, Bindo, and any
 categories you add). Node.js/Express + PostgreSQL backend, Paystack for real payments, and a
-plain HTML/CSS/JS frontend served by the same server.
+plain HTML/CSS/JS frontend served by the same server. Cap photos are hosted on **Cloudinary** —
+the admin panel just takes the image link, there's no file upload on the server.
 
 ## What's included
 
 - **Shop:** browse by category, search, add to cart
 - **Checkout:** delivery details → Paystack hosted checkout → receipt
-- **Admin panel:** upload caps (with photo), manage categories, set delivery pricing per zone —
-  protected by an admin key
+- **Admin panel:** add caps by pasting a Cloudinary image URL, manage categories, set delivery
+  pricing per zone — protected by an admin key
 - **Payments:** real Paystack integration (initialize transaction + webhook confirmation),
   with server-side price/stock validation so nothing can be tampered with from the browser
 
 ## 1. Prerequisites
 
 - Node.js 18+
-- A PostgreSQL database (local, or a free tier on Render / Railway / Supabase / Neon)
+- A PostgreSQL database — since you're using an online provider (Neon, Supabase, Railway, etc.),
+  just grab its connection string
 - A Paystack account — get your **test** secret & public keys from
   https://dashboard.paystack.com/#/settings/developer
+- A Cloudinary account (free tier is fine) — https://cloudinary.com. Upload a cap photo there,
+  then copy its delivery URL (looks like `https://res.cloudinary.com/your-cloud/image/upload/...`)
 
 ## 2. Setup
 
@@ -32,6 +36,7 @@ Edit `.env`:
 
 ```
 DATABASE_URL=postgres://user:password@host:5432/dbname
+PGSSL=true
 ADMIN_API_KEY=pick-a-long-random-string
 PAYSTACK_SECRET_KEY=sk_test_xxxxxxxx
 PAYSTACK_PUBLIC_KEY=pk_test_xxxxxxxx
@@ -44,6 +49,9 @@ Create the tables and seed starter caps/categories/zones:
 npm run db:init
 ```
 
+(If you'd rather run the SQL yourself, `db/schema.sql` has it — paste it into your provider's
+SQL console, or run `psql "<your connection string>" -f db/schema.sql`.)
+
 Start the server:
 
 ```bash
@@ -53,7 +61,17 @@ npm start
 Visit **http://localhost:4000** — the shop loads immediately. Click **Admin** and enter the
 `ADMIN_API_KEY` you set above to manage caps, categories, and delivery pricing.
 
-## 3. Connecting Paystack for real payments
+## 3. Adding a cap photo via Cloudinary
+
+1. Log into Cloudinary and upload the cap photo (drag-and-drop into the Media Library works fine).
+2. Click the uploaded image and copy its **delivery URL** — it starts with
+   `https://res.cloudinary.com/...`.
+3. In the admin panel's "Add a cap" form, paste that URL into the **Image URL** field. A live
+   preview shows up right away so you can confirm it's the right link before saving.
+4. Leave it blank if you don't have a photo yet — the cap still lists, just with a plain color
+   swatch instead of a photo.
+
+## 4. Connecting Paystack for real payments
 
 1. In the Paystack dashboard, go to **Settings → API Keys & Webhooks**.
 2. Add a webhook URL pointing at your deployed server:
@@ -66,7 +84,7 @@ Visit **http://localhost:4000** — the shop loads immediately. Click **Admin** 
 4. Use Paystack's test cards (listed in their docs) to try a full payment end to end before
    going live. When ready, swap in your live secret/public keys.
 
-## 4. How the pieces fit together
+## 5. How the pieces fit together
 
 - `public/index.html` — the shop + admin UI. Talks to the API with `fetch`.
 - `public/order-confirmation.html` — where Paystack redirects the customer after payment;
@@ -74,10 +92,12 @@ Visit **http://localhost:4000** — the shop loads immediately. Click **Admin** 
 - `src/routes/orders.js` — creates orders (recomputing all prices server-side), starts the
   Paystack transaction, and exposes the receipt/verify endpoints.
 - `src/routes/paystackWebhook.js` — verifies Paystack's signature and confirms payment.
-- `src/routes/caps.js`, `categories.js`, `zones.js` — admin-protected CRUD, backed by Postgres.
+- `src/routes/caps.js` — admin-protected CRUD for caps, storing just the Cloudinary `image_url`
+  string (no file handling on the server).
+- `src/routes/categories.js`, `zones.js` — admin-protected CRUD, backed by Postgres.
 - `db/schema.sql` — table definitions + starter data.
 
-## 5. Deploying
+## 6. Deploying
 
 Any Node host works (Render, Railway, Fly.io, a VPS, etc.). Steps are the same as local setup:
 set the environment variables, run `npm run db:init` once against your production database,
@@ -86,8 +106,8 @@ then `npm start` (or let your host run it). Point Paystack's webhook at your liv
 
 ## Notes
 
-- Uploaded cap photos are stored in `/uploads` and served at `/uploads/<filename>`. On most
-  hosts this is fine for a small catalog; for heavier use, swap in S3/Cloudinary later.
+- Since images live on Cloudinary, there's nothing to back up or migrate if you move hosts —
+  only the database needs to travel with you.
 - The admin key is a simple shared secret for one operator. For multiple admin users with
   logins, you'd want to add a proper users table + authentication — happy to help with that
   if you need it.
